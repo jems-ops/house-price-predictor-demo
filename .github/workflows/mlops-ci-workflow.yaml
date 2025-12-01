@@ -1,0 +1,94 @@
+name: MLOps CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+jobs:
+  train-model:
+    runs-on: ubuntu-latest
+
+    services:
+      mlflow:
+        image: ghcr.io/mlflow/mlflow:latest
+        ports:
+          - 5555:5000
+        # GitHub Actions does NOT allow `command:` for services
+        # So we override entrypoint using docker options
+        options: >-
+          --entrypoint /bin/sh
+        env:
+          BACKEND_STORE_URI: sqlite:///mlflow.db
+          ARTIFACT_ROOT: /tmp/mlruns
+
+    steps:
+      - name: Start MLflow Server
+        run: |
+          docker exec ${{ job.services.mlflow.id }} \
+            sh -c "mlflow server \
+              --host 0.0.0.0 \
+              --backend-store-uri sqlite:///mlflow.db \
+              --default-artifact-root /tmp/mlruns &"
+
+      - name: Wait for MLflow
+        run: |
+          for i in {1..20}; do
+            if curl -s http://localhost:5555; then
+              echo "MLflow is up!"
+              exit 0
+            fi
+            echo "Waiting for MLflow..."
+            sleep 3
+          done
+          echo "MLflow did not start"
+          exit 1
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.14"
+
+      - name: Install Dependencies
+        run: pip install --no-cache-dir -r requirements.txt
+
+      # -----------------------------
+      # Data Processing
+      # -----------------------------
+      - name: Run Data Processing
+        run: |
+          python src/data/run_processing.py \
+            --input data/raw/house_data.csv \
+            --output data/processed/cleaned_house_data.csv
+
+      # -----------------------------
+      # Feature Engineering
+      # -----------------------------
+      - name: Run Feature Engineering
+        run: |
+          python src/features/engineer.py \
+            --input data/processed/cleaned_house_data.csv \
+            --output data/processed/featured_house_data.csv \
+            --preprocessor models/trained/preprocessor.pkl
+
+      # -----------------------------
+      # Model Training + MLflow
+      # -----------------------------
+      - name: Train Model
+        env:
+          MLFLOW_TRACKING_URI: http://localhost:5555
+        run: |
+          python src/models/train_model.py \
+            --config configs/model_config.yaml \
+            --data data/processed/featured_house_data.csv \
+            --models-dir models \
+            --mlflow-tracking-uri http://localhost:5555
+
+      - name: Upload Trained Models
+        uses: actions/upload-artifact@v3
+        with:
+          name: trained-models
+          path: models/
