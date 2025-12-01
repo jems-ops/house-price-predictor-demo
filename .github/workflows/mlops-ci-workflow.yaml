@@ -6,65 +6,62 @@ on:
   pull_request:
 
 jobs:
-
   train-model:
     runs-on: ubuntu-latest
 
-    services:
-      mlflow:
-        image: ghcr.io/mlflow/mlflow:latest
-        ports:
-          - 5555:5000
-        options: >-
-          --health-cmd "curl --fail http://localhost:5000/ || exit 1"
-          --health-interval 5s
-          --health-retries 20
-          --health-timeout 5s
-
     steps:
-      # -----------------------------
-      # 📥 CHECKOUT PROJECT
-      # -----------------------------
+      # ------------------------------------
+      # 1) Checkout Code
+      # ------------------------------------
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # -----------------------------
-      # 🐍 SETUP PYTHON
-      # -----------------------------
+      # ------------------------------------
+      # 2) Setup Python
+      # ------------------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install Python Dependencies
+      # ------------------------------------
+      # 3) Install Python dependencies
+      # ------------------------------------
+      - name: Install Dependencies
         run: pip install --no-cache-dir -r requirements.txt
 
-      # -----------------------------
-      # 🔥 START MLFLOW SERVER MANUALLY
-      # GitHub Actions prohibits command: in services
-      # This starts MLflow in background
-      # -----------------------------
-      - name: Start MLflow Server
+      # ------------------------------------
+      # 4) Install MLflow
+      # ------------------------------------
+      - name: Install MLflow
+        run: pip install mlflow
+
+      # ------------------------------------
+      # 5) Start MLflow in background
+      # ------------------------------------
+      - name: Start MLflow Tracking Server
         run: |
           nohup mlflow server \
-            --host 0.0.0.0 \
             --backend-store-uri sqlite:///mlflow.db \
             --default-artifact-root /tmp/mlruns \
-            --port 5000 > mlflow.log 2>&1 &
+            --host 0.0.0.0 \
+            --port 5000 \
+            > mlflow.log 2>&1 &
+
           sleep 10
 
-      # -----------------------------
-      # 1️⃣ DATA PROCESSING
-      # -----------------------------
+      # ------------------------------------
+      # 6) Data Processing
+      # ------------------------------------
       - name: Run Data Processing
         run: |
           python src/data/run_processing.py \
             --input data/raw/house_data.csv \
             --output data/processed/cleaned_house_data.csv
 
-      # -----------------------------
-      # 2️⃣ FEATURE ENGINEERING
-      # -----------------------------
+      # ------------------------------------
+      # 7) Feature Engineering
+      # ------------------------------------
       - name: Run Feature Engineering
         run: |
           python src/features/engineer.py \
@@ -72,10 +69,10 @@ jobs:
             --output data/processed/featured_house_data.csv \
             --preprocessor models/trained/preprocessor.pkl
 
-      # -----------------------------
-      # 3️⃣ MODEL TRAINING + MLFLOW
-      # -----------------------------
-      - name: Train Model with MLflow
+      # ------------------------------------
+      # 8) Model Training with MLflow
+      # ------------------------------------
+      - name: Train Model
         env:
           MLFLOW_TRACKING_URI: http://127.0.0.1:5000
         run: |
@@ -85,10 +82,10 @@ jobs:
             --models-dir models \
             --mlflow-tracking-uri http://127.0.0.1:5000
 
-      # -----------------------------
-      # 📤 UPLOAD TRAINED MODELS
-      # -----------------------------
-      - name: Upload Trained Models as Artifact
+      # ------------------------------------
+      # 9) Upload Model Artifacts
+      # ------------------------------------
+      - name: Upload Trained Models
         uses: actions/upload-artifact@v4
         with:
           name: trained-models
