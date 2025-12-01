@@ -85,8 +85,8 @@ jobs:
       - name: Build & Push FastAPI Image
         uses: docker/build-push-action@v4
         with:
-          context: .
-          file: Dockerfile
+          context: "."
+          file: "Dockerfile"
           push: true
           tags: cloudsheger/fastapi:${{ github.sha }}
           login: true
