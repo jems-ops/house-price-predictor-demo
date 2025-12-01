@@ -2,10 +2,11 @@ name: MLOps CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
 
 jobs:
+
   train-model:
     runs-on: ubuntu-latest
 
@@ -14,49 +15,46 @@ jobs:
         image: ghcr.io/mlflow/mlflow:latest
         ports:
           - 5555:5000
-        # GitHub Actions does NOT allow `command:` for services
-        # So we override entrypoint using docker options
         options: >-
-          --entrypoint /bin/sh
-        env:
-          BACKEND_STORE_URI: sqlite:///mlflow.db
-          ARTIFACT_ROOT: /tmp/mlruns
+          --health-cmd "curl --fail http://localhost:5000/ || exit 1"
+          --health-interval 5s
+          --health-retries 20
+          --health-timeout 5s
 
     steps:
-      - name: Start MLflow Server
-        run: |
-          docker exec ${{ job.services.mlflow.id }} \
-            sh -c "mlflow server \
-              --host 0.0.0.0 \
-              --backend-store-uri sqlite:///mlflow.db \
-              --default-artifact-root /tmp/mlruns &"
-
-      - name: Wait for MLflow
-        run: |
-          for i in {1..20}; do
-            if curl -s http://localhost:5555; then
-              echo "MLflow is up!"
-              exit 0
-            fi
-            echo "Waiting for MLflow..."
-            sleep 3
-          done
-          echo "MLflow did not start"
-          exit 1
-
+      # -----------------------------
+      # 📥 CHECKOUT PROJECT
+      # -----------------------------
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
+      # -----------------------------
+      # 🐍 SETUP PYTHON
+      # -----------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11.14"
+          python-version: "3.11"
 
-      - name: Install Dependencies
+      - name: Install Python Dependencies
         run: pip install --no-cache-dir -r requirements.txt
 
       # -----------------------------
-      # Data Processing
+      # 🔥 START MLFLOW SERVER MANUALLY
+      # GitHub Actions prohibits command: in services
+      # This starts MLflow in background
+      # -----------------------------
+      - name: Start MLflow Server
+        run: |
+          nohup mlflow server \
+            --host 0.0.0.0 \
+            --backend-store-uri sqlite:///mlflow.db \
+            --default-artifact-root /tmp/mlruns \
+            --port 5000 > mlflow.log 2>&1 &
+          sleep 10
+
+      # -----------------------------
+      # 1️⃣ DATA PROCESSING
       # -----------------------------
       - name: Run Data Processing
         run: |
@@ -65,7 +63,7 @@ jobs:
             --output data/processed/cleaned_house_data.csv
 
       # -----------------------------
-      # Feature Engineering
+      # 2️⃣ FEATURE ENGINEERING
       # -----------------------------
       - name: Run Feature Engineering
         run: |
@@ -75,19 +73,22 @@ jobs:
             --preprocessor models/trained/preprocessor.pkl
 
       # -----------------------------
-      # Model Training + MLflow
+      # 3️⃣ MODEL TRAINING + MLFLOW
       # -----------------------------
-      - name: Train Model
+      - name: Train Model with MLflow
         env:
-          MLFLOW_TRACKING_URI: http://localhost:5555
+          MLFLOW_TRACKING_URI: http://127.0.0.1:5000
         run: |
           python src/models/train_model.py \
             --config configs/model_config.yaml \
             --data data/processed/featured_house_data.csv \
             --models-dir models \
-            --mlflow-tracking-uri http://localhost:5555
+            --mlflow-tracking-uri http://127.0.0.1:5000
 
-      - name: Upload Trained Models
+      # -----------------------------
+      # 📤 UPLOAD TRAINED MODELS
+      # -----------------------------
+      - name: Upload Trained Models as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: trained-models
