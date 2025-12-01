@@ -6,52 +6,62 @@ on:
   pull_request:
 
 jobs:
-  train-build-push:
+  train-model:
     runs-on: ubuntu-latest
 
-    env:
-      IMAGE_TAG: ${{ github.sha }}
-
     steps:
+      # ------------------------------------
       # 1) Checkout Code
+      # ------------------------------------
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # ------------------------------------
       # 2) Setup Python
+      # ------------------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # 3) Install Dependencies
-      - name: Install Python Dependencies
+      # ------------------------------------
+      # 3) Install Python dependencies
+      # ------------------------------------
+      - name: Install Dependencies
         run: pip install --no-cache-dir -r requirements.txt
 
-      # 4) Start MLflow Server in Docker
-      - name: Start MLflow Server
-        run: |
-          docker pull ghcr.io/mlflow/mlflow:2.12.1
-          docker rm -f mlflow-server || true
-          docker run -d \
-            --name mlflow-server \
-            -p 5000:5000 \
-            ghcr.io/mlflow/mlflow:2.12.1 \
-            mlflow server \
-              --backend-store-uri sqlite:///mlflow.db \
-              --default-artifact-root /tmp/mlruns \
-              --host 0.0.0.0 \
-              --port 5000
-          echo "Waiting for MLflow server..."
-          sleep 12
+      # ------------------------------------
+      # 4) Install MLflow
+      # ------------------------------------
+      - name: Install MLflow
+        run: pip install mlflow
 
-      # 5) Run Data Processing
+      # ------------------------------------
+      # 5) Start MLflow in background
+      # ------------------------------------
+      - name: Start MLflow Tracking Server
+        run: |
+          nohup mlflow server \
+            --backend-store-uri sqlite:///mlflow.db \
+            --default-artifact-root /tmp/mlruns \
+            --host 0.0.0.0 \
+            --port 5000 \
+            > mlflow.log 2>&1 &
+
+          sleep 10
+
+      # ------------------------------------
+      # 6) Data Processing
+      # ------------------------------------
       - name: Run Data Processing
         run: |
           python src/data/run_processing.py \
             --input data/raw/house_data.csv \
             --output data/processed/cleaned_house_data.csv
 
-      # 6) Run Feature Engineering
+      # ------------------------------------
+      # 7) Feature Engineering
+      # ------------------------------------
       - name: Run Feature Engineering
         run: |
           python src/features/engineer.py \
@@ -59,7 +69,9 @@ jobs:
             --output data/processed/featured_house_data.csv \
             --preprocessor models/trained/preprocessor.pkl
 
-      # 7) Train Model with MLflow
+      # ------------------------------------
+      # 8) Model Training with MLflow
+      # ------------------------------------
       - name: Train Model
         env:
           MLFLOW_TRACKING_URI: http://127.0.0.1:5000
@@ -70,37 +82,11 @@ jobs:
             --models-dir models \
             --mlflow-tracking-uri http://127.0.0.1:5000
 
-      # 8) Upload Trained Model Artifacts
-      - name: Upload Models
+      # ------------------------------------
+      # 9) Upload Model Artifacts
+      # ------------------------------------
+      - name: Upload Trained Models
         uses: actions/upload-artifact@v4
         with:
           name: trained-models
           path: models/
-
-      # 9) Stop MLflow Container
-      - name: Stop and Remove MLflow Container
-        run: docker rm -f mlflow-server || true
-
-      # 10) Build & Push FastAPI Docker Image
-      - name: Build & Push FastAPI Image
-        uses: docker/build-push-action@v4
-        with:
-          context: "."
-          file: "Dockerfile"
-          push: true
-          tags: cloudsheger/fastapi:${{ github.sha }}
-          login: true
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # 11) Build & Push Streamlit Docker Image
-      - name: Build & Push Streamlit Image
-        uses: docker/build-push-action@v4
-        with:
-          context: streamlit_app
-          file: streamlit_app/Dockerfile
-          push: true
-          tags: cloudsheger/streamlit-app:${{ github.sha }}
-          login: true
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
