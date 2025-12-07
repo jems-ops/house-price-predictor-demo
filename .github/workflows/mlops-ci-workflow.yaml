@@ -9,7 +9,7 @@ on:
 jobs:
 
   # ----------------------------------------------------------
-  # 1) RUN ALL (aggregator job that triggers entire pipeline)
+  # 1) RUN ALL (aggregator job)
   # ----------------------------------------------------------
   run_all:
     runs-on: ubuntu-latest
@@ -114,7 +114,7 @@ jobs:
 
 
   # ----------------------------------------------------------
-  # 4) BUILD AND PUBLISH DOCKER IMAGES STAGE
+  # 4) BUILD AND PUBLISH DOCKER IMAGES
   # ----------------------------------------------------------
   run_build_and_publish:
     runs-on: ubuntu-latest
@@ -125,16 +125,21 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # ↓↓↓ IMPORTANT: Download trained model artifacts before docker build
+      - name: Download Trained Models
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-models
+          path: models/trained/
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Optional debug to verify secrets exist (remove if not needed)
       - name: Debug Secrets
         run: |
           echo "DOCKERHUB_USERNAME exists: ${{ secrets.DOCKERHUB_USERNAME != '' }}"
           echo "DOCKERHUB_TOKEN exists: ${{ secrets.DOCKERHUB_TOKEN != '' }}"
 
-      # CORRECTED LOGIN BLOCK
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
