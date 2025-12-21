@@ -90,6 +90,10 @@ jobs:
             --port 5000 > mlflow.log 2>&1 &
           sleep 8
 
+      # ------------------- CREATE MODELS DIR -------------------
+      - name: Create models directory
+        run: mkdir -p models/trained
+
       - name: Train Model
         env:
           MLFLOW_TRACKING_URI: http://127.0.0.1:5000
