@@ -12,6 +12,7 @@ spec:
     matchNames:
       - default
   endpoints:
-    - port: metrics   # must match Service port name
-      path: /metrics
+    - port: metrics         # Must match the Service port name
+      path: /               # Prometheus metrics server exposes metrics at root
       interval: 15s
+      scrapeTimeout: 10s    # Optional: prevents long scrape hangs
