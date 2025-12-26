@@ -12,7 +12,7 @@ spec:
     matchNames:
       - default
   endpoints:
-    - port: metrics         # Must match the Service port name
-      path: /               # Prometheus metrics server exposes metrics at root
+    - port: http        # Must match Service port name
+      path: /metrics    # FastAPI exposes metrics here
       interval: 15s
-      scrapeTimeout: 10s    # Optional: prevents long scrape hangs
+      scrapeTimeout: 10s
