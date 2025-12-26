@@ -9,8 +9,16 @@ spec:
     app: model
   type: NodePort
   ports:
+    # FastAPI port
     - name: http
       port: 8000
-      targetPort: 8000
       nodePort: 30100
+      targetPort: 8000
       protocol: TCP
+    # Prometheus metrics port
+    - name: metrics
+      port: 9100
+      targetPort: 9100
+      protocol: TCP
+status:
+  loadBalancer: {}
