@@ -2,10 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy entire repository including downloaded model artifacts
-COPY . .
+# Copy requirements first (better caching & correctness)
+COPY requirements.txt .
 
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code AFTER deps
+COPY . .
 
 EXPOSE 8000
 
