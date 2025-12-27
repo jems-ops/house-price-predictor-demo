@@ -7,15 +7,17 @@ from prometheus_client import start_http_server, Counter
 import threading
 
 # Prometheus metrics
-API_REQUESTS = Counter("api_requests_total", "Total API requests", ["endpoint", "method", "status"])
+API_REQUESTS = Counter(
+    "api_requests_total",
+    "Total API requests",
+    ["endpoint", "method", "status"]
+)
 
 def start_prometheus_server():
-    start_http_server(9100)  # Expose metrics on port 9100
+    # Prometheus exposes /metrics on port 9100
+    start_http_server(9100)
 
-# Start Prometheus metrics server in a separate thread
-threading.Thread(target=start_prometheus_server, daemon=True).start()
-
-# Initialize FastAPI app with metadata
+# Initialize FastAPI app
 app = FastAPI(
     title="House Price Prediction API",
     description=(
@@ -24,18 +26,17 @@ app = FastAPI(
         "Authored by Gourav Shah."
     ),
     version="1.0.0",
-    contact={
-        "name": "School of Devops",
-        "url": "https://schoolofdevops.com",
-        "email": "learn@schoolofdevops.com",
-    },
-    license_info={
-        "name": "Apache 2.0",
-        "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
-    },
 )
 
-# Add CORS middleware
+# ✅ START METRICS SERVER SAFELY
+@app.on_event("startup")
+def start_metrics():
+    threading.Thread(
+        target=start_prometheus_server,
+        daemon=True
+    ).start()
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -44,20 +45,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Health check endpoint
+# Health check
 @app.get("/health")
 async def health_check():
-    API_REQUESTS.labels(endpoint="/health", method="GET", status="200").inc()
+    API_REQUESTS.labels("/health", "GET", "200").inc()
     return {"status": "healthy", "model_loaded": True}
 
 # Prediction endpoint
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: HousePredictionRequest):
-    API_REQUESTS.labels(endpoint="/predict", method="POST", status="200").inc()
+    API_REQUESTS.labels("/predict", "POST", "200").inc()
     return predict_price(request)
 
 # Batch prediction endpoint
 @app.post("/batch-predict", response_model=list)
 async def batch_predict_endpoint(requests: list[HousePredictionRequest]):
-    API_REQUESTS.labels(endpoint="/batch-predict", method="POST", status="200").inc()
+    API_REQUESTS.labels("/batch-predict", "POST", "200").inc()
     return batch_predict(requests)
