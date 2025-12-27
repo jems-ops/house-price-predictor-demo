@@ -5,6 +5,7 @@ from schemas import HousePredictionRequest, PredictionResponse
 
 from prometheus_client import start_http_server, Counter
 import threading
+import os
 
 # Prometheus metrics
 API_REQUESTS = Counter(
@@ -14,8 +15,9 @@ API_REQUESTS = Counter(
 )
 
 def start_prometheus_server():
-    # Prometheus exposes /metrics on port 9100
-    start_http_server(9100)
+    """Start Prometheus metrics server on port 9100."""
+    port = int(os.getenv("METRICS_PORT", 9100))  # allow override via env
+    start_http_server(port)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -28,15 +30,12 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# ✅ START METRICS SERVER SAFELY
+# ✅ Start metrics server safely on app startup
 @app.on_event("startup")
 def start_metrics():
-    threading.Thread(
-        target=start_prometheus_server,
-        daemon=True
-    ).start()
+    threading.Thread(target=start_prometheus_server, daemon=True).start()
 
-# CORS
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -45,7 +44,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Health check
+# Health check endpoint
 @app.get("/health")
 async def health_check():
     API_REQUESTS.labels("/health", "GET", "200").inc()
