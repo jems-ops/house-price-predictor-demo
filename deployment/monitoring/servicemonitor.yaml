@@ -12,7 +12,6 @@ spec:
     matchNames:
       - default
   endpoints:
-    - port: http        # Must match Service port name
+    - port: metrics        # Must match Service port name
       path: /metrics    # FastAPI exposes metrics here
       interval: 15s
-      scrapeTimeout: 10s
